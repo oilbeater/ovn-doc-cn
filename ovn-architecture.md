@@ -121,4 +121,31 @@ ovn-controller 更新 chassis 上 Open vSwitch 实例的流表。当收到流表
 5. ovn-northd 监控所有 Chassis 记录的 nb_cfg 字段。它将所有 nb_cfg 字段中的最小值复制到北向数据库 NB_Global
 表的 hv_cfg 字段。（这样一来，CMS 或者其他观察者只需要监控这个字段就可以确认是否所有 hypervisor 是否已经更新至最新的配置）
 
-  
+### Chassis 设置
+
+在 OVN 中，每个 Chassis 上的 Open vSwitch 都必须有一个专门的网桥（integration bridge）供 OVN 使用。
+系统启动脚本会在 ovn-controller 启动时创建这个网桥，如果这个网桥不存在将会按照下列的配置自动创建，默认为 br-int 网桥。在 integration bridge
+上有一下几种类型的端口：
+
+- 隧道端口，OVN 维护这些端口来保证逻辑网络的连通性。由 ovn-controller 来负责增加，删除以及更改这些隧道端口。
+
+- 虚拟接口（VIF）,在每个 hypervisor 上接入逻辑网络。
+
+- Gateway 上的物理接口。系统启动脚本会在 ovn-controller 启动前将这些端口加入到网桥中。在一些更复杂的场景中，
+也可能是连接到另一个网桥的 patch 端口。
+
+其他类型的端口不应该被加入这个 integration bridge。接入底层 underlay 的物理端口（gateway port相反，是接入逻辑网络的物理端口）
+绝对不应该接入这个网桥。实际上 underlay 的物理端口不应该接入任何一个网桥。
+
+Integration bridge 应该按照如下的配置启动，每个配置的具体作用可以参考 ovs-vswitchd.conf.db(5):
+
+- fail-mode=secure
+
+禁止相互隔离的逻辑网络在 ovn-controller 启动前转发数据包。参考 ovs-vsctl(8)中的 Controller Failure Settings
+获取更多信息。
+
+- other-config:disable-in-band=true
+
+禁止在 integration bridge 上生成 in-band flow。
+
+Integration bridge 的默认名为 br-int，用户也可以自定义使用其他名字。
