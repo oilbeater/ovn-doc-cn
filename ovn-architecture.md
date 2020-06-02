@@ -191,7 +191,7 @@ OVN 支持多种类型的逻辑交换机端口。如上所述 VIF 端口接入�
 - 每个 chassis 的 bridge mapping 配置中只能映射其中一个 `localnet` 物理网络
 - 为了保证在不同物理网络中 chassis 上 VIF 端口的连通性，底层的物理网络设备需要保证这些物理网络的 L3 连通性。
 
-*注意*：这并不意味着每个 chassis 只能接入一个物理网络，如果多个逻辑交换机分别属于不同的物理网络，chassis 也可以接入多个物理网络。
+*注意*：这并不意味着每个 chassis 只能接入一个物理网络，如果多个逻   辑交换机分别属于不同的物理网络，chassis 也可以接入多个物理网络。
 
 `localport` 类型的逻辑交换机端口实例类特殊的 VIF 端口。 这些端口并不和特定 chassis 绑定，会出现在每个 chassis 上。
 目的为这些端口的流量不会通过隧道发送到其他机器，只会被发送到同一个 chassis 对应的端口上。OpenStack Neutron 利用 `localport`
@@ -216,3 +216,36 @@ ovn-northd 还会将北向数据库中的逻辑交换机端口翻译成南向数
 logical patch port 连接交换机和路由器。
 
 vtep,l2gateway,l3gateway 和 chassisredirect 类型的 port bindings 在网关中使用。请参考下面"网关"部分内容。
+
+### 网关
+
+网关可以提供物理网络和逻辑网络的连通性也可以联通多个不同的 OVN 集群。本节主要关注物理网络和逻辑网络之间的联通，
+多个 OVN 之间的联通请参考"OVN Interconnection"
+
+OVN 支持多类型网关。
+
+#### VTEP 网关
+
+`VTEP 网关` 将一个 OVN 逻辑网络接入一个实现 OVSDB VTEP 协议的物理（或者虚拟）交换机。（VTEP 是一个被误用的单词，他本来
+只是 VXLAN Tunnel Endpoint 的简写）。请参考"VTEP 网关生命周期"一节获取更多信息。
+
+VTEP 网关的主要使用场景是将物理服务器通过支持 OVSDB VTEP 协议的物理 TOR 交换机加入 OVN 的逻辑网络。
+
+#### L2 网关
+
+L2 网关可以将某个 chassis 上可用的物理 L2 分段加入到逻辑网络中，这样物理网络可以成为逻辑网络的一部分。
+
+为了创建一个 L2 网关，CMS 需要在相关的逻辑交换机上增加一个 `l2gateway` 类型的 LSP，并将它和对应的 chassis 绑定。
+ovn-northd 会将这些配置复制到南向数据库的 Port_Binding 表中。在对应的 chassis 上 ovn-controller 会叫数据部
+正确的转发到物理分段上。
+
+
+L2 网关的一些功能和 localnet 端口类似。但是对于 localnet 端口来说，物理网络成为了hypervisor 之间的传输网络。而
+对于 L2 网关，hypervisor 之间的数据包仍然要经过隧道， l2gateway 端口只是用来传输需要讲过物理网络的数据包。因此 L2 网关
+类型的应用和 VTEP 网关存在相似之处，将非虚拟化的机器加入了物理网络，不过 L2 网关并不依赖特定的 TOR 交换机硬件支持。
+
+#### L3 网关路由器
+
+
+
+
