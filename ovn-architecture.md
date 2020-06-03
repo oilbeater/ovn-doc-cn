@@ -246,6 +246,77 @@ L2 网关的一些功能和 localnet 端口类似。但是对于 localnet 端口
 
 #### L3 网关路由器
 
+如"逻辑网络"中所提到的，普通的 OVN 逻辑路由器是分布式运行在每个 hypervisor chassis 上，而不是和某个单独的 chassis 绑定。
+这种模式对于有状态服务，例如 SNAT 和 DNAT，这类需要集中式运行的服务来说是个问题。
 
+为了运行这一类有状态服务，OVN 支持 L3 网关路由器，这一类 OVN 逻辑路由器会运行在特定的 chassis 上。网关路由器通常
+用来连接分布式逻辑路由器和物理网络。运行在每个 hyperyisor 上的虚拟机和容器先接入逻辑交换机再接入分布式逻辑路由器。
+网关路由器通过另一个逻辑交换机和分布式路由器相连，通常这个逻辑交换机也被称为"join"交换机。（OVN 支持多个逻辑路由器不通过中间交换机直接相连，但是
+网关路由器只能和逻辑交换机相连。使用 join 逻辑交换机可以减少分布式路由器所需的 IP 数量。）网关路由器相连的另一端的逻辑交换机
+拥有一个 localnet 类型的端口接入物理网络。
 
+下图展示了一个典型的场景。多个逻辑交换机 LS1,...,LSn 和分布式逻辑路由器 LR1 相连，LR1 通过 LSjoin 和网关路由器 GLR 相连，
+GLR 在另一端和逻辑交换机 LSlocal 相连，在 LSlocal 上有一个 localnet 端口和物理网络相连。
+
+```bash
+                                LSlocal
+                                   |
+                                  GLR
+                                   |
+                                LSjoin
+                                   |
+                                  LR1
+                                   |
+                              +----+----+
+                              |    |    |
+                             LS1  ...  LSn
+```
+
+为了配置一个 L3 网关路由器，CMS需要在北向数据库 "Logical_Router" 实例中设置 "options：chassis"，将其设置成 chassis 的名字。
+接下来 ovn-northd 会自动在南向数据库中设置一个类型为 l3gateway 的特殊 port binding 将逻辑路由器和它的邻居相连。接下来，ovn-controller
+会将流向这个逻辑路由器的数据包通过隧道发送到特定的机器而不是像分布式路由器那样本地处理。
+
+DNAT 和 SNAT 规则需要和网关路由器关联，它提供了一个集中的地方来处理一对多的 SNAT（IP masquerading）。下面将要介绍的分布式网关端口同样支持 NAT。
+
+#### 分布式网关端口
+
+分布式网关端口是一类特殊的逻辑路由器端口，它指向一个特定的 chassis 进行集中处理，这个 chassis 也被称为 gateway chassis。
+分布式网关端口需要连接一个能够连接外部网络端口的逻辑路由器，这个端口可以是 localnet LSP 也可以是接入另一个 OVN 集群的端口（参考 OVN Interconnection）。
+数据包在流经分布式网关端口时会先尽可能本地处理，直到需要时再通过额外的一跳传递到 gateway chassis 处理。
+
+下图展示了分布式网关端口的使用方式。
+
+```bash
+                                LSlocal
+                                   |
+                                  LR1
+                                   |
+                              +----+----+
+                              |    |    |
+                             LS1  ...  LSn
+```
+
+ovn-northd 会为分布式网关端口在南向数据库的 Port_Binding 表创建两条记录。其中一个是和 LRP 同名的 patch 端口，另一个是名为
+cr-<port> 的 chassisredirect 类型端口。chassisredirect 端口有一个特殊的任务：当数据包发送到这个端口时需要通过隧道发送至
+gateway chassis，在 gateway chassis 上，数据包会自动发送到 patch port binding。因此当某些特殊任务需要再 gateway chassis
+上执行时流表会将数据发送至这个 port binding。chassisredirect port binding 不会在其他条件下使用。
+
+CMS 可以通过三种方式类配置分布式网关端口。请参考 ovn-nb(5) 文档中 Logical_router_port 部分的 Distributed Gateway Ports 来了解具体操作。
+
+分布式网关端口支持高可用模式。当指定多个 chassis 时，OVN一次只会使用其中一个作为 gateway chassis。OVN 使用
+BFD 来探测各个网关的连通性，并选择当前在线且优先级最高的网关。
+
+##### 物理 VLAN MTU 问题
+
+再次考虑如下的拓扑结构：
+
+```bash
+                                LSlocal
+                                   |
+                                  LR1
+                                   |
+                              +----+----+
+                              |    |    |
+                             LS1  ...  LSn
+```
 
