@@ -320,3 +320,14 @@ BFD 来探测各个网关的连通性，并选择当前在线且优先级最高�
                              LS1  ...  LSn
 ```
 
+假设每个逻辑交换机 LS1,...,LSn 通过 分布式网关端口 LR1 和 LSlocal 上的 localnet 端口桥接进物理的 VLAN-tagged 网络。
+如果一个数据包来自 LSi 并且目标是外部网络，OVN 将会将其通过隧道发送至 gateway chassis。当数据部通过 LR1 的逻辑路由器流水线时，
+可能会讲过 NAT 处理，最终到达 LSlocal 的 localnet 端口。如果网络中所有的物理链路使用相同的 MTU，那么经过隧道的数据包将会带来
+MTU 相关的问题：从隧道到 gateway chassis 的额外隧道开销导致数据包无法充分利用物理链路的 MTU。
+
+OVN 提供了两个解决方案，即 `reside-on-redirect-chassis` 和 `redirect-type` 两个选项。这两种方案均需要
+每个虚拟交换机 LS1,...,LSn 均包含一个 localnet 类型端口 LN1,...,LNn，并在每个 chassis 上进行映射。这样
+数据包可以直接通过 localnet 端口转发而无需隧道。两种方案的不同在于是全部还是部分数据包需要以这种方式发送。两者
+最显著的区别在于`reside-on-redirect-chassis`选项更容易配置，`redirect-type`对东西流量更有利。
+
+
