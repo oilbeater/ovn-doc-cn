@@ -330,4 +330,21 @@ OVN 提供了两个解决方案，即 `reside-on-redirect-chassis` 和 `redirect
 数据包可以直接通过 localnet 端口转发而无需隧道。两种方案的不同在于是全部还是部分数据包需要以这种方式发送。两者
 最显著的区别在于`reside-on-redirect-chassis`选项更容易配置，`redirect-type`对东西流量更有利。
 
+第一个方案是在逻辑路由器端口上设置 `reside-on-redirect-shassis` 选项。在 LS1 到 LR1 的 LRP 上设置这个选项
+会禁止 gateway chassis 之外 chassis 上处理 LS1 到 LR1 的数据包。在 gateway chassis 之外的 chassis 上发往
+LR1 的数据包将会被转发到 LN1。这样经过 LR1 逻辑流水线的数据包最终会到达 LSlocal 上的 localnet 端口进行处理。数据包
+在过程中不会经过隧道，也就避免了 MTU 问题。
 
+由于 gateway chassis 之外的 chassis 不会处理 LS1 到 LR1 的数据包，这个选项导致的结果就是逻辑路由器 LR1 从分布式变为集中式。
+因此，除了南北流量外，东西流量也必须经过 gateway chassis。
+
+不要在 分布式网关端口上设置 `reside-on-redirect-chassis`，在上面的拓扑中，这个选项应该配置在连接 LS1,...,LSn 到
+LR1 的 LRP 上。
+
+第二个方案是使用分布式网关端口的 `redirect-tye` 选项。在 `bridged` 上设置这个选项可以让那些重定向到 gateway chassis 的数据包
+通过 localnet 发送，而不是隧道。这个选项不会改变非重定向到 gateway chassis 的数据包。
+
+如果要使用 `redirect-type` 的方案，CMS 或者管理员需要再每个 chassis 上配置一个唯一的以太网地址给逻辑路由器，并通过 Open vSwitch
+database 里的 `ovn-chassis-mac-mappings` 提供给 ovn-controller 使用。这相比 `reside-on-redirect-chassis` 的配置要复杂的多。
+
+`redirect-type` 选项需要配置在分布式网关端口上。
